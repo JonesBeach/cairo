@@ -1,0 +1,7 @@
+[package]
+name = "cairo"
+version = "0.1.3"
+edition = "2021"
+
+[dev-dependencies]
+ureq = "2.10.0"
