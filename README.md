@@ -1,5 +1,5 @@
 # cairo
-**Cairo** is the final module in a Rust HTTP server course from `From Scratch Code`, designed as a hands-on learning tool for intermediate Rust developers. This project allows you to explore core Rust concepts by building a simple, Axum-inspired web framework and HTTP server from scratch, with no third-party libraries. Whether you're looking to deepen your understanding of network programming or just want a practical project to enhance your Rust-y skills, Cairo hopes to always be there for you.
+**Cairo** is the final module in a Rust HTTP server course from [From Scratch Code](https://fromscratchcode.com/), designed as a hands-on learning tool for intermediate Rust developers. This project allows you to explore core Rust concepts by building a simple, Axum-inspired web framework and HTTP server from scratch, with no third-party libraries. Whether you're looking to deepen your understanding of network programming or just want a practical project to enhance your Rust-y skills, Cairo hopes to always be there for you.
 
 ## Features
 This project includes:
