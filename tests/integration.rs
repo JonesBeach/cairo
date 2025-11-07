@@ -34,7 +34,9 @@ mod integration_final {
                 .route("/", get(hello_world))
                 .route("/post/:id", post(post_handler))
                 .route("/cpu", get(cpu_bound_task));
-            cairo::serve(listener, router).await;
+            cairo::serve(listener, router)
+                .await
+                .expect("Failed to launch server.");
         }
     }
 

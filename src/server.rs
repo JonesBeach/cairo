@@ -1,4 +1,7 @@
-use std::{io::ErrorKind, sync::Arc};
+use std::{
+    io::{ErrorKind, Result},
+    sync::Arc,
+};
 
 use tokio::net::TcpListener;
 
@@ -10,15 +13,12 @@ use crate::{connection::Connection, Router};
 /// tokio task to handle each connection concurrently. Each connection is parsed into a
 /// `Request`, which is then routed using the `Router`. The resulting `Response` is sent back to
 /// the client.
-pub async fn serve(listener: TcpListener, router: Router) {
+pub async fn serve(listener: TcpListener, router: Router) -> Result<()> {
     // We create an `Arc` so we can share the `Router` between threads.
     let router = Arc::new(router);
 
     loop {
-        let (stream, _) = listener
-            .accept()
-            .await
-            .expect("Failed to accept connection.");
+        let (stream, _) = listener.accept().await?;
         let router = router.clone();
 
         tokio::spawn(async move {

@@ -23,7 +23,6 @@ impl<T: AsyncRead + AsyncWrite + Unpin> Connection<T> {
 
         // By this point, we know we have read our headers and body into the `buffer`.
         let request = str::from_utf8(&buffer).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
-        println!("Request: {}", request);
 
         Request::try_from(request)
             .map_err(|_| Error::new(ErrorKind::InvalidData, "Unexpected request format."))
@@ -47,7 +46,6 @@ impl<T: AsyncRead + AsyncWrite + Unpin> Connection<T> {
 
         while !headers_complete {
             let num_bytes_read = self.stream.read(&mut temp_buffer).await?;
-            println!("Read {} bytes.\n--", num_bytes_read);
             if num_bytes_read == 0 {
                 return Err(Error::new(ErrorKind::UnexpectedEof, "Zero bytes read."));
             }
@@ -94,7 +92,6 @@ impl<T: AsyncRead + AsyncWrite + Unpin> Connection<T> {
         // across multiple streams.
         while content_length > 0 {
             let num_bytes_read = self.stream.read(&mut temp_buffer).await?;
-            println!("Read {} bytes.\n--", num_bytes_read);
             if num_bytes_read == 0 {
                 return Err(Error::new(ErrorKind::UnexpectedEof, "Zero bytes read."));
             }
