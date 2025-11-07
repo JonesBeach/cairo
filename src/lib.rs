@@ -3,6 +3,7 @@
 #![warn(clippy::unwrap_used)]
 #![warn(rust_2018_idioms)]
 
+mod connection;
 mod core;
 mod handler;
 mod into_response;

@@ -1,7 +1,7 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use crate::{
-    extract::{FromRequest, FromRequestParts},
+    extract::FromRequest,
     http::{Request, Response},
     response::IntoResponse,
 };
@@ -22,10 +22,7 @@ impl BoxedHandler {
         H: Handler<T> + Send + Sync + 'static,
         T: Send + Sync + 'static,
     {
-        Self(Arc::new(MakeErasedHandler {
-            handler,
-            _marker: PhantomData,
-        }))
+        Self(Arc::new(ConcreteHandler::new(handler)))
     }
 
     pub fn call_handler(&self, req: Request) -> Response {
@@ -40,12 +37,21 @@ impl Clone for BoxedHandler {
 }
 
 /// A struct to hold a [`Handler`] which hides away its type info using [`PhantomData`].
-struct MakeErasedHandler<H, T> {
+struct ConcreteHandler<H, T> {
     handler: H,
     _marker: PhantomData<T>,
 }
 
-impl<H, T> ErasedHandler for MakeErasedHandler<H, T>
+impl<H, T> ConcreteHandler<H, T> {
+    fn new(handler: H) -> Self {
+        Self {
+            handler,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<H, T> ErasedHandler for ConcreteHandler<H, T>
 where
     H: Handler<T> + Send + Sync + 'static,
     T: Send + Sync + 'static,
@@ -75,31 +81,24 @@ where
 /// Macro to implement [`Handler`] for functions that take various numbers of arguments.
 macro_rules! handler_variable_args {
     (
-        [$($ty:ident),*], $last:ident
+        [$($ty:ident),*]
     ) => {
         #[allow(non_snake_case)]
-        impl<T, R, $($ty,)* $last> Handler<($($ty,)* $last,)> for T
+        impl<T, R, $($ty,)*> Handler<($($ty,)*)> for T
         where
-            T: Fn($($ty,)* $last,) -> R,
+            T: Fn($($ty,)*) -> R,
             R: IntoResponse,
-            $( $ty: FromRequestParts, )*
-            $last: FromRequest,
+            $( $ty: FromRequest, )*
         {
             fn call_handler(&self, req: Request) -> Response {
                 $(
-                    let parts = req.into_parts();
-                    let $ty = match $ty::from_request_parts(&parts) {
+                    let $ty = match $ty::from_request(&req) {
                         Ok(value) => value,
                         Err(e) => return e.into_response(),
                     };
                 )*
 
-                let $last = match $last::from_request(req) {
-                    Ok(value) => value,
-                    Err(e) => return e.into_response(),
-                };
-
-                let res = self($($ty,)* $last,);
+                let res = self($($ty,)*);
                 res.into_response()
             }
         }
@@ -107,12 +106,11 @@ macro_rules! handler_variable_args {
 }
 
 // Apply the handler for all the number of args we currently support.
-handler_variable_args!([], T1);
-handler_variable_args!([T1], T2);
-handler_variable_args!([T1, T2], T3);
-handler_variable_args!([T1, T2, T3], T4);
-handler_variable_args!([T1, T2, T3, T4], T5);
-handler_variable_args!([T1, T2, T3, T4, T5], T6);
+handler_variable_args!([T1]);
+handler_variable_args!([T1, T2]);
+handler_variable_args!([T1, T2, T3]);
+handler_variable_args!([T1, T2, T3, T4]);
+handler_variable_args!([T1, T2, T3, T4, T5]);
 
 #[cfg(test)]
 mod tests {
@@ -169,7 +167,7 @@ mod tests {
             "Hello, World!"
         }
 
-        let erased_handler = MakeErasedHandler {
+        let erased_handler = ConcreteHandler {
             handler,
             _marker: PhantomData,
         };

@@ -12,7 +12,7 @@ where
     H: Handler<T> + Send + Sync + 'static,
     T: Send + Sync + 'static,
 {
-    PathRouter::new().on(method, handler)
+    PathRouter::default().on(method, handler)
 }
 
 /// A macro to allow a [`Method`] + [`Handler`] to start a chain of method/handler pairs.
@@ -57,17 +57,12 @@ add_http_function!(patch, Patch);
 /// A struct which holds the registration of [`BoxedHandler`] objects whose types have been erased
 /// and which HTTP REST [`Method`]s they correspond to. Each of these corresponds to a single URL
 /// pattern. See [`crate::Router`] for where all the URL patterns for an app are defined.
+#[derive(Default)]
 pub struct PathRouter {
     routes: HashMap<Method, BoxedHandler>,
 }
 
 impl PathRouter {
-    pub fn new() -> Self {
-        Self {
-            routes: HashMap::default(),
-        }
-    }
-
     pub fn find(&self, method: &Method) -> Option<BoxedHandler> {
         self.routes.get(method).cloned()
     }
@@ -92,12 +87,6 @@ impl PathRouter {
     }
 }
 
-impl Default for PathRouter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::{http::Response, response::IntoResponse};
@@ -119,7 +108,7 @@ mod tests {
 
     #[test]
     fn test_path_router_new() {
-        let router: PathRouter = PathRouter::new();
+        let router: PathRouter = PathRouter::default();
         assert!(router.routes.is_empty());
     }
 
@@ -151,7 +140,7 @@ mod tests {
 
     #[test]
     fn test_path_router_find_none() {
-        let router = PathRouter::new();
+        let router = PathRouter::default();
         let handler = router.find(&Method::Get);
         assert!(handler.is_none());
     }

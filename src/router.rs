@@ -6,32 +6,36 @@ use crate::{
     response::IntoResponse,
 };
 
-/// Function to match a route pattern with an actual path
-fn match_route(route_pattern: &str, path: &str) -> Option<PathParams> {
-    let extract_segments = |path: &str| {
-        path.trim_start_matches('/')
-            .split('/')
-            .map(|s| s.to_string())
-            .collect::<Vec<String>>()
-    };
-    let route_segments = extract_segments(route_pattern);
-    let path_segments = extract_segments(path);
+fn split_path(path: &str) -> Vec<&str> {
+    path.trim_start_matches('/').split('/').collect()
+}
+
+fn route_matches(route_pattern: &str, path: &str) -> bool {
+    let route_segments = split_path(route_pattern);
+    let path_segments = split_path(path);
 
     if route_segments.len() != path_segments.len() {
-        return None;
+        return false;
     }
 
-    // Collect parameters from the path if the segments match
-    let mut params = vec![];
     for (route_segment, path_segment) in route_segments.iter().zip(path_segments.iter()) {
-        if route_segment.starts_with(':') {
-            params.push(path_segment.to_string());
-        } else if route_segment != path_segment {
-            return None;
+        if !route_segment.starts_with(':') && route_segment != path_segment {
+            return false;
         }
     }
 
-    Some(params)
+    true
+}
+
+fn extract_path_params(route_pattern: &str, path: &str) -> PathParams {
+    let route_segments = split_path(route_pattern);
+    let path_segments = split_path(path);
+
+    route_segments
+        .iter()
+        .zip(path_segments.iter())
+        .filter_map(|(r, p)| r.strip_prefix(':').map(|_| p.to_string()))
+        .collect()
 }
 
 /// Router struct to manage routes and handlers
@@ -55,25 +59,28 @@ impl Router {
 
     /// Call the appropriate handler based on the request
     pub(crate) fn call(&self, mut request: Request) -> Response {
-        let mut found_path_params = None;
-        let handler = self.routes.iter().find_map(|(pattern, path_router)| {
-            match match_route(pattern, request.path()) {
-                Some(path_params) => {
-                    found_path_params = Some(path_params);
-                    path_router.find(request.method())
-                }
-                None => None,
-            }
-        });
+        let path = request.path();
+        let method = request.method();
 
-        if let Some(path_params) = found_path_params {
-            request.set_path_params(path_params);
-        }
+        // Step 1: find the matching route pattern and its path router
+        let Some((pattern, path_router)) = self
+            .routes
+            .iter()
+            .find(|(pattern, _)| route_matches(pattern, path))
+        else {
+            return (404, "Not Found").into_response();
+        };
 
-        match handler {
-            Some(handler) => handler.call_handler(request),
-            None => (404, "Not Found").into_response(),
-        }
+        // Step 2: find the handler for the given HTTP method
+        let Some(handler) = path_router.find(method) else {
+            return (405, "Method Not Allowed").into_response();
+        };
+
+        // Step 3: extract parameters
+        let params = extract_path_params(pattern, path);
+        request.set_path_params(params);
+
+        handler.call_handler(request)
     }
 }
 
@@ -84,7 +91,7 @@ impl Default for Router {
 }
 
 #[cfg(test)]
-mod tests {
+mod router_tests {
     use crate::{extract::Path, http::Method, routing::get};
 
     use super::*;
@@ -128,8 +135,8 @@ mod tests {
         let response = router.call(Request::new(Method::Post, "/hello"));
         assert_eq!(
             response.text(),
-            "Not Found",
-            "Handler should return 'Not Found'"
+            "Method Not Allowed",
+            "Handler should return 'Method Not Allowed'"
         );
     }
 
@@ -197,5 +204,82 @@ mod tests {
             router.routes.is_empty(),
             "Routes should be empty when using default"
         );
+    }
+}
+
+#[cfg(test)]
+mod route_matches_tests {
+    use super::*;
+
+    #[test]
+    fn matches_exact_path() {
+        assert!(route_matches("/users", "/users"));
+        assert!(route_matches("/users/list", "/users/list"));
+    }
+
+    #[test]
+    fn matches_with_param() {
+        assert!(route_matches("/users/:id", "/users/42"));
+        assert!(route_matches(
+            "/posts/:slug/comments/:cid",
+            "/posts/hello-world/comments/123"
+        ));
+    }
+
+    #[test]
+    fn rejects_with_different_segment_counts() {
+        assert!(!route_matches("/users/:id", "/users"));
+        assert!(!route_matches("/users/:id", "/users/42/comments"));
+    }
+
+    #[test]
+    fn rejects_with_literal_mismatch() {
+        assert!(!route_matches("/users/:id", "/accounts/42"));
+        assert!(!route_matches(
+            "/posts/:slug/comments/:cid",
+            "/posts/hello/likes/123"
+        ));
+    }
+
+    #[test]
+    fn allows_multiple_params() {
+        assert!(route_matches("/a/:b/:c", "/a/1/2"));
+        assert!(!route_matches("/a/:b/:c", "/a/1"));
+    }
+}
+
+#[cfg(test)]
+mod extract_path_params_tests {
+    use super::*;
+
+    #[test]
+    fn extracts_single_param() {
+        let params = extract_path_params("/users/:id", "/users/42");
+        assert_eq!(params, vec!["42"]);
+    }
+
+    #[test]
+    fn extracts_multiple_params() {
+        let params = extract_path_params("/posts/:slug/comments/:cid", "/posts/hello/comments/99");
+        assert_eq!(params, vec!["hello", "99"]);
+    }
+
+    #[test]
+    fn extracts_none_when_no_params() {
+        let params = extract_path_params("/users", "/users");
+        assert!(params.is_empty());
+    }
+
+    #[test]
+    fn ignores_literal_mismatches() {
+        // Even though the literals don't match, extraction shouldn't panic.
+        let params = extract_path_params("/users/:id", "/posts/42");
+        assert_eq!(params, vec!["42"]);
+    }
+
+    #[test]
+    fn ignores_extra_segments() {
+        let params = extract_path_params("/users/:id", "/users/42/extra");
+        assert_eq!(params, vec!["42"]);
     }
 }

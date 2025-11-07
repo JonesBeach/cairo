@@ -1,4 +1,4 @@
-use std::{error, fmt};
+use std::fmt;
 
 use crate::http::Method;
 
@@ -32,8 +32,6 @@ impl fmt::Display for InvalidRequestError {
         write!(f, "Invalid HTTP request")
     }
 }
-
-impl error::Error for InvalidRequestError {}
 
 /// Represents an HTTP request.
 #[derive(Debug, PartialEq)]
