@@ -7,6 +7,12 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::http::{Request, Response};
 
+pub fn parse_request_from_bytes(bytes: &[u8]) -> Result<Request> {
+    let text = str::from_utf8(bytes).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
+    Request::parse(text)
+        .map_err(|_| Error::new(ErrorKind::InvalidData, "Unexpected request format."))
+}
+
 pub(crate) struct Connection<T: AsyncRead + AsyncWrite> {
     stream: T,
 }
@@ -16,29 +22,26 @@ impl<T: AsyncRead + AsyncWrite + Unpin> Connection<T> {
         Self { stream }
     }
 
-    /// Read from a `TcpStream` (or any type that implements `Read`) and attempt to get an HTTP
-    /// `Request`.
+    /// Read from an async stream and attempt to get an HTTP `Request`.
     pub async fn read_request(&mut self) -> Result<Request> {
-        let buffer = self.fill_buffer().await?;
-
-        // By this point, we know we have read our headers and body into the `buffer`.
-        let request = str::from_utf8(&buffer).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
-
-        Request::try_from(request)
-            .map_err(|_| Error::new(ErrorKind::InvalidData, "Unexpected request format."))
+        let bytes = self.read_bytes().await?;
+        parse_request_from_bytes(&bytes)
     }
 
-    /// Write an HTTP `Response` to a `TcpStream` (or any type that implements `Write`).
-    pub async fn send_response(&mut self, response: Response) -> Result<usize> {
-        let num_bytes_written = self.stream.write(&response.as_bytes()).await?;
-        self.stream.flush().await?;
+    /// Write an HTTP `Response` to an async stream.
+    pub async fn send_response(&mut self, response: Response) -> Result<()> {
+        self.write(&response.as_bytes()).await
+    }
 
-        Ok(num_bytes_written)
+    async fn write(&mut self, bytes: &[u8]) -> Result<()> {
+        let _ = self.stream.write(bytes).await?;
+        self.stream.flush().await?;
+        Ok(())
     }
 
     /// An HTTP request may require multiple reads from a stream. Here we read from a stream until
     /// we have read the entirety of the HTTP headers and body and return the resulting buffer.
-    async fn fill_buffer(&mut self) -> Result<Vec<u8>> {
+    async fn read_bytes(&mut self) -> Result<Vec<u8>> {
         let mut buffer = vec![];
         let mut temp_buffer = [0; 512];
         let mut headers_complete = false;
@@ -183,7 +186,6 @@ mod tests {
         let mut conn = Connection::new(stream);
         let result = conn.send_response(response).await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 58);
         assert_eq!(
             conn.stream().clone().into_inner(),
             b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello, World!"

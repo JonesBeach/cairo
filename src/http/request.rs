@@ -41,6 +41,55 @@ pub struct Request {
 }
 
 impl Request {
+    /// Parses a raw HTTP request string into a `Request` instance.
+    pub fn parse(value: &str) -> Result<Self, InvalidRequestError> {
+        let mut lines = value.split("\r\n");
+
+        let request_line = lines.next().ok_or(InvalidRequestError)?;
+        let mut request_line_parts = request_line.split_whitespace();
+
+        let method = request_line_parts
+            .next()
+            .ok_or(InvalidRequestError)?
+            .try_into()
+            .map_err(|_| InvalidRequestError)?;
+        let path = request_line_parts.next().ok_or(InvalidRequestError)?;
+        let version = request_line_parts.next().ok_or(InvalidRequestError)?;
+        // We could move this into a Version enum
+        if version == "HTTP/2.0" {
+            unimplemented!("Unsupported HTTP version: {}", version);
+        }
+
+        // Confirm the request line has exactly 3 parts
+        if request_line_parts.next().is_some() {
+            return Err(InvalidRequestError);
+        }
+
+        let mut request = Request::new(method, path);
+
+        let mut headers = vec![];
+        for line in &mut lines {
+            // An empty line indicates the end of the headers
+            if line.is_empty() {
+                break;
+            }
+
+            let mut header_parts = line.splitn(2, ": ");
+            let name = header_parts.next().ok_or(InvalidRequestError)?.to_string();
+            let value = header_parts.next().ok_or(InvalidRequestError)?.to_string();
+            headers.push((name, value));
+        }
+
+        request.set_headers(headers);
+
+        // The request body consists of the remaining lines, so we rejoin them
+        let body = lines.collect::<Vec<&str>>().join("\r\n");
+        if !body.is_empty() {
+            request.set_body(body);
+        }
+
+        Ok(request)
+    }
     /// Create a new `Request` instance with the given method and path.
     pub fn new(method: Method, path: &str) -> Self {
         Self::with_headers(method, path, Headers::default())
@@ -99,60 +148,6 @@ impl Request {
     }
 }
 
-impl TryFrom<&str> for Request {
-    type Error = InvalidRequestError;
-
-    /// Parses a raw HTTP request string into a `Request` instance.
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let mut lines = value.split("\r\n");
-
-        let request_line = lines.next().ok_or(InvalidRequestError)?;
-        let mut request_line_parts = request_line.split_whitespace();
-
-        let method = request_line_parts
-            .next()
-            .ok_or(InvalidRequestError)?
-            .try_into()
-            .map_err(|_| InvalidRequestError)?;
-        let path = request_line_parts.next().ok_or(InvalidRequestError)?;
-        let version = request_line_parts.next().ok_or(InvalidRequestError)?;
-        // We could move this into a Version enum
-        if version == "HTTP/2.0" {
-            unimplemented!("Unsupported HTTP version: {}", version);
-        }
-
-        // Confirm the request line has exactly 3 parts
-        if request_line_parts.next().is_some() {
-            return Err(InvalidRequestError);
-        }
-
-        let mut request = Request::new(method, path);
-
-        let mut headers = vec![];
-        for line in &mut lines {
-            // An empty line indicates the end of the headers
-            if line.is_empty() {
-                break;
-            }
-
-            let mut header_parts = line.splitn(2, ": ");
-            let name = header_parts.next().ok_or(InvalidRequestError)?.to_string();
-            let value = header_parts.next().ok_or(InvalidRequestError)?.to_string();
-            headers.push((name, value));
-        }
-
-        request.set_headers(headers);
-
-        // The request body consists of the remaining lines, so we rejoin them
-        let body = lines.collect::<Vec<&str>>().join("\r\n");
-        if !body.is_empty() {
-            request.set_body(body);
-        }
-
-        Ok(request)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -160,7 +155,7 @@ mod tests {
     #[test]
     fn test_parse_request_valid_root() {
         let stream = "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n";
-        let request = Request::try_from(stream).unwrap();
+        let request = Request::parse(stream).unwrap();
         assert_eq!(
             request,
             Request::with_headers(
@@ -171,7 +166,7 @@ mod tests {
         );
 
         let stream = "POST / HTTP/1.1\r\nHost: localhost\r\n\r\n";
-        let request = Request::try_from(stream).unwrap();
+        let request = Request::parse(stream).unwrap();
         assert_eq!(
             request,
             Request::with_headers(
@@ -185,14 +180,14 @@ mod tests {
     #[test]
     fn test_parse_request_invalid_method() {
         let stream = "PAST / HTTP/1.1\r\nHost: localhost\r\n\r\n";
-        let request = Request::try_from(stream);
+        let request = Request::parse(stream);
         assert!(request.is_err(), "Request should not be formed.");
     }
 
     #[test]
     fn test_parse_request_valid_path() {
         let stream = "GET /path HTTP/1.1\r\nHost: localhost\r\n\r\n";
-        let request = Request::try_from(stream).unwrap();
+        let request = Request::parse(stream).unwrap();
         assert_eq!(
             request,
             Request::with_headers(
@@ -213,7 +208,7 @@ mod tests {
                        Content-Type: application/x-www-form-urlencoded\r\n\
                        \r\n\
                        Hello Rust";
-        let request = Request::try_from(stream).unwrap();
+        let request = Request::parse(stream).unwrap();
         let mut expected = Request::with_headers(
             Method::Post,
             "/post/5",
@@ -236,28 +231,28 @@ mod tests {
     #[test]
     fn test_parse_request_empty() {
         let stream = "";
-        let result = Request::try_from(stream);
+        let result = Request::parse(stream);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_parse_request_whitespace_only() {
         let stream = "   \r\n   ";
-        let result = Request::try_from(stream);
+        let result = Request::parse(stream);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_parse_request_whitespace_only_single_line() {
         let stream = "      ";
-        let result = Request::try_from(stream);
+        let result = Request::parse(stream);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_parse_request_invalid_format() {
         let stream = "INVALID REQUEST\r\n";
-        let result = Request::try_from(stream);
+        let result = Request::parse(stream);
         assert!(result.is_err());
     }
 }
