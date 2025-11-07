@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod integration_final {
     mod example {
-        use std::net::TcpListener;
+        use tokio::net::TcpListener;
 
         use cairo::{
             extract::Path,
@@ -25,14 +25,16 @@ mod integration_final {
             format!("Total: {}", total)
         }
 
-        pub fn start() {
-            let listener = TcpListener::bind("127.0.0.1:7878").expect("Failed to start server.");
+        pub async fn start() {
+            let listener = TcpListener::bind("127.0.0.1:7878")
+                .await
+                .expect("Failed to start server.");
 
             let router = Router::new()
                 .route("/", get(hello_world))
                 .route("/post/:id", post(post_handler))
                 .route("/cpu", get(cpu_bound_task));
-            cairo::serve(listener, router);
+            cairo::serve(listener, router).await;
         }
     }
 
@@ -131,7 +133,12 @@ mod integration_final {
     #[test]
     fn test_the_server_works() {
         // We only start a single instance of the server to avoid any port conflicts.
-        spawn(|| example::start());
+        spawn(|| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async {
+                example::start().await;
+            });
+        });
         sleep(Duration::from_millis(100));
 
         assert_tcp_stream();

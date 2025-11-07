@@ -1,4 +1,4 @@
-use std::net::TcpListener;
+use tokio::net::TcpListener;
 
 use cairo::{
     extract::Path,
@@ -22,13 +22,16 @@ fn cpu_bound_task() -> String {
     format!("Total: {}", total)
 }
 
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").expect("Failed to start server.");
+#[tokio::main]
+async fn main() {
+    let listener = TcpListener::bind("127.0.0.1:7878")
+        .await
+        .expect("Failed to start server.");
     println!("Server listening on port 7878");
 
     let router = Router::new()
         .route("/", get(hello_world))
         .route("/post/:id", post(post_handler))
         .route("/cpu", get(cpu_bound_task));
-    cairo::serve(listener, router);
+    cairo::serve(listener, router).await;
 }
