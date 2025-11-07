@@ -52,7 +52,7 @@ cargo run --example server_final
 ```
 
 ## Course Information
-Interested in building this project step-by-step? [Check out the full course](https://fromscratchcode.com/courses/), where we build the HTTP server from scratch, covering everything from basic routing to advanced topics like Rust macros and concurrency.
+Interested in building this project step-by-step? [Check out the full course](https://fromscratchcode.com/courses/rust-http-server/), where we build the HTTP server from scratch, covering everything from basic routing to advanced topics like Rust macros and concurrency.
 
 The course is perfect for Rust developers who want to deepen their skills in server-side programming, learn about HTTP servers and routing without relying on third-party libraries, and build advanced library interfaces.
 
@@ -63,7 +63,7 @@ The course is perfect for Rust developers who want to deepen their skills in ser
 The software is granted under the terms of the MIT License. For details see the file `LICENSE` included with the source distribution. All copyrights are owned by their respective authors.
 
 ## Attribution
-This project uses software components that are licensed under the MIT License. While we do not use Axum directly, several components (particularly the `Router`, `PathRouter`, `Handlder`, `FromRequest`, and `FromRequestParts`) are heavily inspired by Axum. The following is the required attribution notice for the original work:
+This project uses software components that are licensed under the MIT License. While we do not use Axum directly, several components (particularly the `Router`, `PathRouter`, `Handlder`, and `FromRequest`) are heavily inspired by Axum. The following is the required attribution notice for the original work:
 
 ```
 MIT License
